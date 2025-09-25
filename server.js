@@ -2,56 +2,62 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// Your Telegram Configuration
-const TELEGRAM_BOT_TOKEN = '7876427497:AAFCu9zbouiRNPh5Qg-bfAUF71MyOouDzUM';
-const TELEGRAM_TARGETS = [919495165, -1001685005748]; // your personal + channel IDs
+// Telegram Configuration - EXACTLY matching your working bot
+const TELEGRAM_TOKEN = "7876427497:AAFCu9zbouiRNPh5Qg-bfAUF71MyOouDzUM";
+const TELEGRAM_TARGETS = [919495165, -1001685005748]; // personal + channel IDs
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(express.text());
+app.use(express.urlencoded({ extended: true }));
 
 // Main webhook endpoint for TradingView
 app.post('/webhook', async (req, res) => {
     try {
-        console.log('Received webhook:', JSON.stringify(req.body, null, 2));
+        console.log('=== WEBHOOK RECEIVED ===');
         console.log('Headers:', JSON.stringify(req.headers, null, 2));
+        console.log('Body type:', typeof req.body);
+        console.log('Body content:', JSON.stringify(req.body, null, 2));
         
-        // TradingView can send data in different formats, let's handle all cases
+        // TradingView sends webhook data in different formats
         let message = '';
         
-        // Check various possible message fields
-        if (req.body.message) {
-            message = req.body.message;
-        } else if (req.body.text) {
-            message = req.body.text;
-        } else if (req.body.alert) {
-            message = req.body.alert;
-        } else if (typeof req.body === 'string') {
+        if (typeof req.body === 'string') {
+            // Sometimes TradingView sends as plain text
             message = req.body;
+        } else if (req.body && typeof req.body === 'object') {
+            // Check various possible message fields
+            message = req.body.message || 
+                     req.body.text || 
+                     req.body.alert ||
+                     req.body.content ||
+                     JSON.stringify(req.body);
         } else {
-            // If no recognized message field, use the entire body as message
-            message = JSON.stringify(req.body);
+            message = 'Webhook received but no message content found';
         }
         
-        // If still empty, create a test message
-        if (!message || message.trim() === '' || message === '{}') {
-            message = 'Test alert received from TradingView - message field was empty';
+        // Clean up the message
+        if (!message || message.trim() === '' || message === '{}' || message === 'null') {
+            message = '🔥 Test alert from God Money Machine webhook! 🔥';
         }
         
         console.log('Processed message:', message);
+        console.log('=========================');
         
-        // Send to all your Telegram targets
-        await sendToTelegram(message);
+        // Send to Telegram
+        const telegramResult = await sendToTelegram(message);
         
         res.status(200).json({ 
             success: true, 
             message: 'Alert sent to Telegram',
+            telegramResult: telegramResult,
             receivedData: req.body,
             processedMessage: message,
             timestamp: new Date().toISOString()
         });
         
     } catch (error) {
-        console.error('Error processing webhook:', error);
+        console.error('❌ Error processing webhook:', error);
         res.status(500).json({ 
             success: false, 
             error: error.message 
@@ -60,9 +66,10 @@ app.post('/webhook', async (req, res) => {
 });
 
 async function sendToTelegram(message) {
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    const results = [];
     
-    // Send to both your personal chat and channel
+    // Send to both targets
     for (const chatId of TELEGRAM_TARGETS) {
         try {
             const payload = {
@@ -71,23 +78,43 @@ async function sendToTelegram(message) {
                 parse_mode: 'HTML'
             };
             
-            await axios.post(url, payload);
-            console.log(`✅ Message sent to chat ${chatId}`);
+            console.log(`📤 Sending to chat ${chatId}:`, message.substring(0, 100) + '...');
+            
+            const response = await axios.post(url, payload);
+            console.log(`✅ Success for chat ${chatId}:`, response.data);
+            
+            results.push({
+                chatId: chatId,
+                success: true,
+                response: response.data
+            });
             
         } catch (error) {
             console.error(`❌ Error sending to chat ${chatId}:`, error.response?.data || error.message);
+            results.push({
+                chatId: chatId,
+                success: false,
+                error: error.response?.data || error.message
+            });
         }
     }
+    
+    return results;
 }
 
-// Health check endpoint
+// Health check endpoints
 app.get('/', (req, res) => {
     res.json({ 
         status: 'God Money Machine Webhook Server is Running! 💰',
         timestamp: new Date().toISOString(),
         endpoints: {
             webhook: '/webhook',
-            health: '/health'
+            health: '/health',
+            test: '/test'
+        },
+        telegram: {
+            token: TELEGRAM_TOKEN.substring(0, 10) + '...',
+            targets: TELEGRAM_TARGETS
         }
     });
 });
@@ -100,8 +127,29 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Test endpoint
+app.get('/test', async (req, res) => {
+    try {
+        const testMessage = '🧪 Test message from webhook server health check!';
+        const results = await sendToTelegram(testMessage);
+        res.json({
+            success: true,
+            message: 'Test message sent',
+            results: results,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 app.listen(PORT, () => {
-    console.log(`🚀 God Money Machine server running on port ${PORT}`);
+    console.log(`🚀 God Money Machine Webhook Server started on port ${PORT}`);
     console.log(`📡 Webhook endpoint: /webhook`);
-    console.log(`💸 Ready to receive TradingView alerts!`);
+    console.log(`🔧 Test endpoint: /test`);
+    console.log(`💸 Telegram targets: ${TELEGRAM_TARGETS.join(', ')}`);
+    console.log(`🤖 Bot token: ${TELEGRAM_TOKEN.substring(0, 10)}...`);
 });

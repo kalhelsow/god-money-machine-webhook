@@ -12,10 +12,32 @@ app.use(express.json());
 // Main webhook endpoint for TradingView
 app.post('/webhook', async (req, res) => {
     try {
-        console.log('Received webhook:', req.body);
+        console.log('Received webhook:', JSON.stringify(req.body, null, 2));
+        console.log('Headers:', JSON.stringify(req.headers, null, 2));
         
-        // Get message from TradingView alert
-        const message = req.body.message || req.body.text || JSON.stringify(req.body);
+        // TradingView can send data in different formats, let's handle all cases
+        let message = '';
+        
+        // Check various possible message fields
+        if (req.body.message) {
+            message = req.body.message;
+        } else if (req.body.text) {
+            message = req.body.text;
+        } else if (req.body.alert) {
+            message = req.body.alert;
+        } else if (typeof req.body === 'string') {
+            message = req.body;
+        } else {
+            // If no recognized message field, use the entire body as message
+            message = JSON.stringify(req.body);
+        }
+        
+        // If still empty, create a test message
+        if (!message || message.trim() === '' || message === '{}') {
+            message = 'Test alert received from TradingView - message field was empty';
+        }
+        
+        console.log('Processed message:', message);
         
         // Send to all your Telegram targets
         await sendToTelegram(message);
@@ -23,6 +45,8 @@ app.post('/webhook', async (req, res) => {
         res.status(200).json({ 
             success: true, 
             message: 'Alert sent to Telegram',
+            receivedData: req.body,
+            processedMessage: message,
             timestamp: new Date().toISOString()
         });
         

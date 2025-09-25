@@ -1,0 +1,16 @@
+{
+  "name": "god-money-machine-webhook",
+  "version": "1.0.0",
+  "description": "TradingView to Telegram webhook server for God Money Machine",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
